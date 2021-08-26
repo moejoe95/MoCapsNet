@@ -12,3 +12,6 @@ __pycache__/
 # Data folder
 data/
 checkpoints/
+
+env/
+*.out
