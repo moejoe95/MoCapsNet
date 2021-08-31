@@ -39,14 +39,15 @@ class CapsNetTrainer:
 
         self.net = CapsuleNetwork(img_shape=img_shape, channels=256, primary_dim=8, num_classes=10,
                                   out_dim=16, num_routing=args.num_routing, skip=args.residual, device=self.device).to(self.device)
+        # print(self.net)
         if args.momentum:
             self.net = transform_to_momentumnet(
                 self.net,
                 ["block1.functions"],
-                gamma=0.9,
+                gamma=args.gamma,
                 use_backprop=False,
                 is_residual=True,
-                keep_first_layer=True,
+                keep_first_layer=False,
             )
 
         if self.multi_gpu:
@@ -67,7 +68,7 @@ class CapsNetTrainer:
     def run(self, epochs, classes):
         print(8*'#', 'Run started'.upper(), 8*'#')
         eye = torch.eye(len(classes)).to(self.device)
-        memory_usage = dict()
+        max_memory_usage = 0
         for epoch in range(1, epochs+1):
             for phase in ['train', 'test']:
                 print(f'{phase}ing...'.capitalize())
@@ -92,9 +93,6 @@ class CapsNetTrainer:
                     outputs, reconstructions, layers = self.net(images)
                     loss = self.criterion(
                         outputs, labels, images, reconstructions)
-
-                    if epoch == 1:
-                        memory_usage[i] = get_gpu_memory_map()[0]
 
                     if phase == 'train':
                         loss.backward()
@@ -127,11 +125,12 @@ class CapsNetTrainer:
                 print(f'{phase.upper()} Epoch {epoch}, Loss {running_loss/(i+1)}',
                       f'Accuracy {accuracy} Time {round(time()-t0, 3)}s')
 
-            self.scheduler.step()
+                # check memory usage
+                current_memory_usage = get_gpu_memory_map()[0]
+                if current_memory_usage > max_memory_usage:
+                    max_memory_usage = current_memory_usage
 
-        plt.scatter(memory_usage.keys(),
-                    memory_usage.values(), color='hotpink')
-        plt.savefig('mem.png')
+            self.scheduler.step()
 
         now = str(datetime.now()).replace(" ", "-")
         error_rate = round((1-accuracy)*100, 2)
@@ -153,3 +152,5 @@ class CapsNetTrainer:
         for i in range(len(classes)):
             print('Accuracy of %5s : %2d %%' % (
                 classes[i], 100 * class_correct[i] / class_total[i]))
+
+        print('max. memory usage: ', max_memory_usage)

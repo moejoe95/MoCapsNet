@@ -20,7 +20,7 @@ parser.add_argument('-bs', '--batch_size', type=int,
                     default=128, help='Batch size.')
 # Epochs
 parser.add_argument('-e', '--epochs', type=int,
-                    default=5, help='Number of epochs.')
+                    default=30, help='Number of epochs.')
 # Learning rate
 parser.add_argument('-lr', '--learning_rate', type=float,
                     default=1e-3, help='Learning rate.')
@@ -59,6 +59,8 @@ parser.add_argument('-cb_bs', '--cb_batch_size', type=int,
 # use momentum
 parser.add_argument('-m', '--momentum', dest='momentum', action='store_true',
                     help='Use residual shortcut connections..')
+parser.add_argument('-g', '--gamma', type=float,
+                    default=0.9, help='Momentum term.')
 
 args = parser.parse_args()
 
