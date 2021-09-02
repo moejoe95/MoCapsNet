@@ -62,6 +62,9 @@ parser.add_argument('-m', '--momentum', dest='momentum', action='store_true',
 parser.add_argument('-g', '--gamma', type=float,
                     default=0.9, help='Momentum term.')
 
+parser.add_argument('-b', '--num_res_blocks', type=int,
+                    default=1, help='Number of residual blocks.')
+
 args = parser.parse_args()
 
 device = torch.device(args.device)

@@ -37,18 +37,19 @@ class CapsNetTrainer:
         self.loaders = loaders
         img_shape = self.loaders['train'].dataset[0][0].numpy().shape
 
-        self.net = CapsuleNetwork(img_shape=img_shape, channels=256, primary_dim=8, num_classes=10,
-                                  out_dim=16, num_routing=args.num_routing, skip=args.residual, device=self.device).to(self.device)
-        # print(self.net)
-        if args.momentum:
-            self.net = transform_to_momentumnet(
-                self.net,
-                ["block1.functions"],
-                gamma=args.gamma,
-                use_backprop=False,
-                is_residual=True,
-                keep_first_layer=False,
-            )
+        self.net = CapsuleNetwork(args, img_shape=img_shape, channels=256, primary_dim=8, num_classes=10,
+                                  out_dim=16, device=self.device).to(self.device)
+
+        print(self.net)
+        self.net = transform_to_momentumnet(
+            self.net,
+            ["blocks." + str(i) +
+             ".functions" for i in range(args.num_res_blocks)],
+            gamma=args.gamma,
+            use_backprop=(not args.momentum),
+            is_residual=True,
+            keep_first_layer=False,
+        )
 
         if self.multi_gpu:
             self.net = nn.DataParallel(self.net)

@@ -26,18 +26,16 @@ class ResCapsBlock(nn.Module):
         )
 
     def forward(self, x):
-
         for f in self.functions:
             if self.skip:
                 x = x + f(x)
             else:
                 x = f(x)
-
         return x
 
 
 class CapsuleNetwork(nn.Module):
-    def __init__(self, img_shape, channels, primary_dim, num_classes, out_dim, num_routing, skip, device: torch.device, kernel_size=9):
+    def __init__(self, args, img_shape, channels, primary_dim, num_classes, out_dim, device: torch.device, kernel_size=9):
         super(CapsuleNetwork, self).__init__()
         self.img_shape = img_shape
         self.num_classes = num_classes
@@ -55,14 +53,16 @@ class CapsuleNetwork(nn.Module):
 
         # caps layer 1
         self.caps1 = caps.RoutingCapsules(
-            primary_dim, primary_caps, 64, primary_dim, num_routing, device=self.device)
+            primary_dim, primary_caps, 32, primary_dim, args.num_routing, device=self.device)
 
-        self.block1 = ResCapsBlock(
-            primary_dim, 64, 64, primary_dim, num_routing, skip, self.device)
+        self.blocks = torch.nn.ModuleList()
+        for _ in range(args.num_res_blocks):
+            self.blocks.append(ResCapsBlock(
+                primary_dim, 32, 32, primary_dim, args.num_routing, args.residual, self.device))
 
         # caps layer 2
         self.caps2 = caps.RoutingCapsules(
-            primary_dim, 64, num_classes, out_dim, num_routing, device=self.device)
+            primary_dim, 32, num_classes, out_dim, args.num_routing, device=self.device)
 
         self.decoder = nn.Sequential(
             nn.Linear(out_dim * num_classes, 512),
@@ -80,8 +80,10 @@ class CapsuleNetwork(nn.Module):
         out = self.primary(out)
         out = self.caps1(out)
 
-        out = self.block1(out)
-        layers = [out]  # for cb measurement
+        layers = []
+        for block in self.blocks:
+            out = block(out)
+            layers.append(out)  # for cb measurement
 
         out = self.caps2(out)
         preds = torch.norm(out, dim=-1)
