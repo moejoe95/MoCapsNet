@@ -12,6 +12,8 @@ from model import CapsuleNetwork
 from loss import CapsuleLoss
 from time import time
 
+from ranger21 import Ranger21
+
 from conflicting_bundles import bundle_entropy
 from momentumnet import transform_to_momentumnet
 import matplotlib.pyplot as plt
@@ -40,7 +42,7 @@ class CapsNetTrainer:
         self.net = CapsuleNetwork(args, img_shape=img_shape, channels=256, primary_dim=8, num_classes=10,
                                   out_dim=16, device=self.device).to(self.device)
 
-        print(self.net)
+        # print(self.net)
         self.net = transform_to_momentumnet(
             self.net,
             ["blocks." + str(i) +
@@ -55,10 +57,9 @@ class CapsNetTrainer:
             self.net = nn.DataParallel(self.net)
 
         self.criterion = CapsuleLoss(loss_lambda=0.5, recon_loss_scale=5e-4)
-        self.optimizer = optim.Adam(
-            self.net.parameters(), lr=args.learning_rate)
-        self.scheduler = optim.lr_scheduler.ExponentialLR(
-            self.optimizer, gamma=args.lr_decay)
+        self.optimizer = Ranger21(
+            self.net.parameters(), lr=args.learning_rate, num_epochs=args.epochs, num_batches_per_epoch=args.batch_size)
+        # self.scheduler = optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=args.lr_decay)
         print(8*'#', 'PyTorch Model built'.upper(), 8*'#')
         print('Num params:', sum([prod(p.size())
               for p in self.net.parameters()]))
@@ -68,11 +69,12 @@ class CapsNetTrainer:
 
     def run(self, epochs, classes):
         print(8*'#', 'Run started'.upper(), 8*'#')
+        print('MODE;EPOCH;LOSS:ACCURACY;TIME')
         eye = torch.eye(len(classes)).to(self.device)
         max_memory_usage = 0
+
         for epoch in range(1, epochs+1):
             for phase in ['train', 'test']:
-                print(f'{phase}ing...'.capitalize())
                 if phase == 'train':
                     self.net.train()
                 else:
@@ -119,19 +121,15 @@ class CapsNetTrainer:
                             print("Layer %d | Bundle entropy %.3f" % (i, be))
                             print("Layer %d | Number of bundles %d" % (i, nb))
 
-                    if phase == 'train' and False:
-                        print(f'Epoch {epoch}, Batch {i+1}, Loss {running_loss/(i+1)}',
-                              f'Accuracy {accuracy} Time {round(time()-t1, 3)}s')
-
-                print(f'{phase.upper()} Epoch {epoch}, Loss {running_loss/(i+1)}',
-                      f'Accuracy {accuracy} Time {round(time()-t0, 3)}s')
+                print(
+                    f'{phase.upper()};{epoch};{running_loss/(i+1)};{accuracy};{round(time()-t0, 3)}s')
 
                 # check memory usage
                 current_memory_usage = get_gpu_memory_map()[0]
                 if current_memory_usage > max_memory_usage:
                     max_memory_usage = current_memory_usage
 
-            self.scheduler.step()
+            # self.scheduler.step()
 
         now = str(datetime.now()).replace(" ", "-")
         error_rate = round((1-accuracy)*100, 2)
@@ -149,6 +147,8 @@ class CapsNetTrainer:
                 label = labels[i]
                 class_correct[label] += c[i].item()
                 class_total[label] += 1
+
+        print(8*'#', 'Run ended'.upper(), 8*'#')
 
         for i in range(len(classes)):
             print('Accuracy of %5s : %2d %%' % (
