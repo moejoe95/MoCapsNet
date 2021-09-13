@@ -23,7 +23,7 @@ parser.add_argument('-e', '--epochs', type=int,
                     default=30, help='Number of epochs.')
 # Learning rate
 parser.add_argument('-lr', '--learning_rate', type=float,
-                    default=0.01, help='Learning rate.')
+                    default=1e-3, help='Learning rate.')
 # Number of routing iterations
 parser.add_argument('--num_routing', type=int, default=3,
                     help='Number of routing iteration in routing capsules.')
@@ -64,6 +64,13 @@ parser.add_argument('-g', '--gamma', type=float,
 
 parser.add_argument('-b', '--num_res_blocks', type=int,
                     default=1, help='Number of residual blocks.')
+
+parser.add_argument('-c', '--num_caps', type=int,
+                    default=32, help='Number of capsules.')
+
+# optimizer
+parser.add_argument('-o', '--optimizer', type=str,
+                    default='adam', help='One of: ranger21, adam')
 
 args = parser.parse_args()
 

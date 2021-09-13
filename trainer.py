@@ -43,23 +43,32 @@ class CapsNetTrainer:
                                   out_dim=16, device=self.device).to(self.device)
 
         # print(self.net)
-        self.net = transform_to_momentumnet(
-            self.net,
-            ["blocks." + str(i) +
-             ".functions" for i in range(args.num_res_blocks)],
-            gamma=args.gamma,
-            use_backprop=(not args.momentum),
-            is_residual=True,
-            keep_first_layer=False,
-        )
+        if args.momentum:
+            self.net = transform_to_momentumnet(
+                self.net,
+                ["blocks." + str(i) +
+                 ".functions" for i in range(args.num_res_blocks)],
+                gamma=args.gamma,
+                use_backprop=False,
+                is_residual=True,
+                keep_first_layer=False,
+            )
 
         if self.multi_gpu:
             self.net = nn.DataParallel(self.net)
 
         self.criterion = CapsuleLoss(loss_lambda=0.5, recon_loss_scale=5e-4)
-        self.optimizer = Ranger21(
-            self.net.parameters(), lr=args.learning_rate, num_epochs=args.epochs, num_batches_per_epoch=args.batch_size)
-        # self.scheduler = optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=args.lr_decay)
+
+        if args.optimizer == 'ranger21':
+            print('using ranger21 optimizer...')
+            self.optimizer = Ranger21(
+                self.net.parameters(), lr=args.learning_rate, num_epochs=args.epochs, num_batches_per_epoch=args.batch_size)
+        else:
+            print('using adam optimizer...')
+            self.optimizer = optim.Adam(
+                self.net.parameters(), lr=args.learning_rate)
+            self.scheduler = optim.lr_scheduler.ExponentialLR(
+                self.optimizer, gamma=args.lr_decay)
         print(8*'#', 'PyTorch Model built'.upper(), 8*'#')
         print('Num params:', sum([prod(p.size())
               for p in self.net.parameters()]))
