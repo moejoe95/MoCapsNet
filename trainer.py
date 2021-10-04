@@ -35,11 +35,12 @@ class CapsNetTrainer:
         self.batch_size = args.batch_size
         self.cb_batch_size = args.cb_batch_size
         self.conflicts = args.conflicts
+        self.modelname = args.modelname
 
         self.loaders = loaders
         img_shape = self.loaders['train'].dataset[0][0].numpy().shape
 
-        self.net = CapsuleNetwork(args, img_shape=img_shape, channels=256, primary_dim=8, num_classes=10,
+        self.net = CapsuleNetwork(args, img_shape=img_shape, channels=256, primary_dim=8, num_classes=args.num_classes,
                                   out_dim=16, device=self.device).to(self.device)
 
         # print(self.net)
@@ -159,6 +160,7 @@ class CapsNetTrainer:
 
         print(8*'#', 'Run ended'.upper(), 8*'#')
 
+        print('Accuracy of ', self.modelname)
         for i in range(len(classes)):
             print('Accuracy of %5s : %2d %%' % (
                 classes[i], 100 * class_correct[i] / class_total[i]))

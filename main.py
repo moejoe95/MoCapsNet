@@ -12,9 +12,8 @@ DATA_PATH = '/home/josef.gugglberger/capsule-network/data'
 # Collect arguments (if any)
 parser = argparse.ArgumentParser()
 
-# MNIST or CIFAR?
 parser.add_argument('--dataset', type=str, default='MNIST',
-                    help="'MNIST' or 'CIFAR' (case insensitive).")
+                    help="'MNIST', 'SVHN' or 'CIFAR' (case insensitive).")
 # Batch size
 parser.add_argument('-bs', '--batch_size', type=int,
                     default=128, help='Batch size.')
@@ -74,6 +73,13 @@ parser.add_argument('-o', '--optimizer', type=str,
 
 args = parser.parse_args()
 
+if not args.residual and not args.momentum:
+    args.modelname = "CapsNet_" + str(args.num_res_blocks)
+elif args.residual and not args.momentum:
+    args.modelname = "ResCapsNet_" + str(args.num_res_blocks)
+elif args.residual and args.momentum:
+    args.modelname = "MoCapsNet_" + str(args.num_res_blocks)
+
 device = torch.device(args.device)
 
 if args.gpu_device is not None:
@@ -84,8 +90,16 @@ if args.multi_gpu:
 
 datasets = {
     'MNIST': torchvision.datasets.MNIST,
-    'CIFAR': torchvision.datasets.CIFAR10
+    'CIFAR': torchvision.datasets.CIFAR10,
+    'CIFAR100': torchvision.datasets.CIFAR100,
+    'SVHN': torchvision.datasets.SVHN
 }
+
+# dataset defaults
+split_train = {'train': True}
+split_test = {'train': False}
+size = 32
+mean, std = ((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
 
 if args.dataset.upper() == 'MNIST':
     args.data_path = os.path.join(args.data_path, 'MNIST')
@@ -94,12 +108,20 @@ if args.dataset.upper() == 'MNIST':
     mean, std = ((0.1307,), (0.3081,))
 elif args.dataset.upper() == 'CIFAR':
     args.data_path = os.path.join(args.data_path, 'CIFAR')
-    size = 32
     classes = ['plane', 'car', 'bird', 'cat', 'deer',
                'dog', 'frog', 'horse', 'ship', 'truck']
-    mean, std = ((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+elif args.dataset.upper() == 'CIFAR100':
+    args.data_path = os.path.join(args.data_path, 'CIFAR100')
+    classes = list(range(100))
+elif args.dataset.upper() == 'SVHN':
+    args.data_path = os.path.join(args.data_path, 'SVHN')
+    classes = list(range(10))
+    split_train = {'split': "train"}
+    split_test = {'split': "test"}
 else:
-    raise ValueError('Dataset must be either MNIST or CIFAR')
+    raise ValueError('Dataset must be either MNIST, SVHN or CIFAR')
+
+args.num_classes = len(classes)
 
 transform = transforms.Compose([
     # shift by 2 pixels in either direction with zero padding.
@@ -110,14 +132,15 @@ transform = transforms.Compose([
 
 loaders = {}
 trainset = datasets[args.dataset.upper()](
-    root=args.data_path, train=True, download=True, transform=transform)
+    root=args.data_path, **split_train, download=True, transform=transform)
 loaders['train'] = torch.utils.data.DataLoader(
     trainset, batch_size=args.batch_size, shuffle=True, num_workers=2)
 
 testset = datasets[args.dataset.upper()](
-    root=args.data_path, train=False, download=True, transform=transform)
+    root=args.data_path, **split_test, download=True, transform=transform)
 loaders['test'] = torch.utils.data.DataLoader(
     testset, batch_size=args.batch_size, shuffle=False, num_workers=2)
+
 print(8*'#', f'Using {args.dataset.upper()} dataset', 8*'#')
 
 # Run
