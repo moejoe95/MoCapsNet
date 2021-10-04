@@ -11,7 +11,7 @@ from capsules import squash
 
 
 class ResCapsBlock(nn.Module):
-    def __init__(self, in_dim, in_caps, num_classes, out_dim, num_routing, skip, device):
+    def __init__(self, in_dim, in_caps, num_classes, out_dim, num_routing, skip, device, routing='RBA'):
         super(ResCapsBlock, self).__init__()
         self.skip = skip
 
@@ -19,7 +19,7 @@ class ResCapsBlock(nn.Module):
             *[
                 nn.Sequential(
                     caps.RoutingCapsules(
-                        in_dim, in_caps, num_classes, out_dim, num_routing, device=device)
+                        in_dim, in_caps, num_classes, out_dim, num_routing, device=device, routing=routing)
                 )
                 for _ in range(2)
             ]
@@ -53,16 +53,16 @@ class CapsuleNetwork(nn.Module):
 
         # caps layer 1
         self.caps1 = caps.RoutingCapsules(
-            primary_dim, primary_caps, args.num_caps, primary_dim, args.num_routing, device=self.device)
+            primary_dim, primary_caps, args.num_caps, primary_dim, args.num_routing, device=self.device, routing=args.routing)
 
         self.blocks = torch.nn.ModuleList()
         for _ in range(args.num_res_blocks):
             self.blocks.append(ResCapsBlock(
-                primary_dim, args.num_caps, args.num_caps, primary_dim, args.num_routing, args.residual, self.device))
+                primary_dim, args.num_caps, args.num_caps, primary_dim, args.num_routing, args.residual, self.device, routing=args.routing))
 
         # caps layer 2
         self.caps2 = caps.RoutingCapsules(
-            primary_dim, args.num_caps, num_classes, out_dim, args.num_routing, device=self.device)
+            primary_dim, args.num_caps, num_classes, out_dim, args.num_routing, device=self.device, routing=args.routing)
 
         self.decoder = nn.Sequential(
             nn.Linear(out_dim * num_classes, 512),

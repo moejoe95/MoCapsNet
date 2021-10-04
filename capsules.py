@@ -6,6 +6,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import numpy as np
+
 
 def squash(s, dim=-1):
     '''
@@ -50,7 +52,7 @@ class PrimaryCapsules(nn.Module):
 
 
 class RoutingCapsules(nn.Module):
-    def __init__(self, in_dim, in_caps, num_caps, dim_caps, num_routing, device: torch.device):
+    def __init__(self, in_dim, in_caps, num_caps, dim_caps, num_routing, device: torch.device, routing='RBA'):
         """
         Initialize the layer.
 
@@ -59,7 +61,7 @@ class RoutingCapsules(nn.Module):
                 in_caps: 		Number of input capsules if digits layer.
                 num_caps: 		Number of capsules in the capsule layer
                 dim_caps: 		Dimensionality, i.e. length, of the output capsule vector.
-                num_routing:	Number of iterations during routing algorithm		
+                num_routing:	Number of iterations during routing algorithm
         """
         super(RoutingCapsules, self).__init__()
         self.in_dim = in_dim
@@ -68,9 +70,12 @@ class RoutingCapsules(nn.Module):
         self.dim_caps = dim_caps
         self.num_routing = num_routing
         self.device = device
+        self.routing = routing.upper()
 
         self.W = nn.Parameter(
             0.01 * torch.randn(1, num_caps, in_caps, dim_caps, in_dim))
+        self.bias = nn.Parameter(torch.empty(1, num_caps, dim_caps))
+        nn.init.constant_(self.bias, 0.1)
 
     def __repr__(self):
         tab = '  '
@@ -85,6 +90,17 @@ class RoutingCapsules(nn.Module):
         return res
 
     def forward(self, x):
+        if self.routing == "RBA":
+            return self.dynamic_routing(x)
+        elif self.routing == "SDA":
+            return self.sda_routing(x)
+        else:
+            raise NotImplementedError("No routing algorithm with this name found.")
+
+    def dynamic_routing(self, x):
+        """
+        Dynamic routing by Sabour et al.
+        """
         batch_size = x.size(0)
         # (batch_size, in_caps, in_dim) -> (batch_size, 1, in_caps, in_dim, 1)
         x = x.unsqueeze(1).unsqueeze(4)
@@ -126,6 +142,54 @@ class RoutingCapsules(nn.Module):
         s = (c * u_hat).sum(dim=2)
 
         # apply "squashing" non-linearity along dim_caps
-        v = squash(s)
+        return squash(s)
 
-        return v
+    def sda_routing(self, u):
+        """
+        Scaled-distance-agreement routing by Peer et al.
+        """
+        batch_size = u.size(0)
+        u_norm = torch.norm(u, dim=-1)
+
+        u = u.unsqueeze(1).unsqueeze(3)
+        u = u.tile([1, self.num_caps, 1, 1, 1])
+        u = u.tile([1, 1, 1, self.dim_caps, 1])
+
+        # tile over batch size
+        w = self.W.tile([batch_size, 1, 1, 1, 1])
+
+        # Dotwise product between u and w to get all votes
+        u_hat = torch.sum(u * w, dim=-1)
+
+        # ensure that ||u_hat|| <= ||v_i||
+        u_hat_norm = torch.norm(u_hat, dim=-1, keepdim=True)
+        u_norm = u_norm.unsqueeze(1).unsqueeze(3)
+        u_norm = u_norm.tile([1, self.num_caps, 1, self.dim_caps])
+        new_u_hat_norm = torch.minimum(u_hat_norm, u_norm)
+        u_hat = u_hat / u_hat_norm * new_u_hat_norm
+
+        # scaled distance agreement routing
+        bias = self.bias.tile([batch_size, 1, 1])
+        b_ij = torch.zeros([batch_size, self.num_caps, self.in_caps, 1], device=self.device)
+        for r in range(self.num_routing):
+            c_ij = F.softmax(b_ij, dim=1)
+            c_ij_tiled = c_ij.tile([1, 1, 1, self.dim_caps])
+            s_j = torch.sum(c_ij_tiled * u_hat, dim=2) + bias
+            v_j = squash(s_j)
+
+            if r < self.num_routing - 1:
+                v_j = v_j.unsqueeze(2)
+                v_j = v_j.tile([1, 1, self.in_caps, 1])
+
+                # calculate scale factor t
+                p_p = 0.9
+                d = torch.norm(v_j - u_hat, dim=-1, keepdim=True)
+                d_o = torch.sum(torch.sum(d))
+                d_p = d_o * 0.5
+                t = np.log(p_p * (self.num_caps - 1)) - \
+                    np.log(1 - p_p) / (d_p - d_o + 1e-12)
+                t = t.unsqueeze(-1)
+
+                b_ij = t * d
+
+        return v_j

@@ -27,6 +27,10 @@ parser.add_argument('-lr', '--learning_rate', type=float,
 parser.add_argument('--num_routing', type=int, default=3,
                     help='Number of routing iteration in routing capsules.')
 
+# routing algorithm
+parser.add_argument('--routing', type=str, default="RBA",
+                    help='RBA or SDA routing.')                    
+
 # Exponential learning rate decay
 parser.add_argument('--lr_decay', type=float, default=0.96,
                     help='Exponential learning rate decay.')
