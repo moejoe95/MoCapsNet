@@ -74,8 +74,9 @@ class RoutingCapsules(nn.Module):
 
         self.W = nn.Parameter(
             0.01 * torch.randn(1, num_caps, in_caps, dim_caps, in_dim))
-        self.bias = nn.Parameter(torch.empty(1, num_caps, dim_caps))
-        nn.init.constant_(self.bias, 0.1)
+        if routing.upper() == "SDA":
+            self.bias = nn.Parameter(torch.empty(1, num_caps, dim_caps))
+            nn.init.constant_(self.bias, 0.1)
 
     def __repr__(self):
         tab = '  '
@@ -95,7 +96,8 @@ class RoutingCapsules(nn.Module):
         elif self.routing == "SDA":
             return self.sda_routing(x)
         else:
-            raise NotImplementedError("No routing algorithm with this name found.")
+            raise NotImplementedError(
+                "No routing algorithm with this name found.")
 
     def dynamic_routing(self, x):
         """
@@ -170,13 +172,13 @@ class RoutingCapsules(nn.Module):
 
         # scaled distance agreement routing
         bias = self.bias.tile([batch_size, 1, 1])
-        b_ij = torch.zeros([batch_size, self.num_caps, self.in_caps, 1], device=self.device)
+        b_ij = torch.zeros(
+            [batch_size, self.num_caps, self.in_caps, 1], device=self.device)
         for r in range(self.num_routing):
             c_ij = F.softmax(b_ij, dim=1)
             c_ij_tiled = c_ij.tile([1, 1, 1, self.dim_caps])
             s_j = torch.sum(c_ij_tiled * u_hat, dim=2) + bias
             v_j = squash(s_j)
-
             if r < self.num_routing - 1:
                 v_j = v_j.unsqueeze(2)
                 v_j = v_j.tile([1, 1, self.in_caps, 1])
