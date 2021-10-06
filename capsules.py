@@ -153,12 +153,12 @@ class RoutingCapsules(nn.Module):
         batch_size = u.size(0)
         u_norm = torch.norm(u, dim=-1)
 
-        u = u.unsqueeze(1).unsqueeze(3)
-        u = u.tile([1, self.num_caps, 1, 1, 1])
-        u = u.tile([1, 1, 1, self.dim_caps, 1])
+        u = torch.unsqueeze(torch.unsqueeze(u, 1), 3)
+        u = torch.tile(u, [1, self.num_caps, 1, 1, 1])
+        u = torch.tile(u, [1, 1, 1, self.dim_caps, 1])
 
         # tile over batch size
-        w = self.W.tile([batch_size, 1, 1, 1, 1])
+        w = torch.tile(self.W, [batch_size, 1, 1, 1, 1])
 
         # Dotwise product between u and w to get all votes
         u_hat = torch.sum(u * w, dim=-1)
@@ -167,21 +167,32 @@ class RoutingCapsules(nn.Module):
         u_hat = self.restrict_prediction(u_hat, u_norm)
 
         # scaled distance agreement routing
-        bias = self.bias.tile([batch_size, 1, 1])
-        b_ij = torch.zeros(
-            [batch_size, self.num_caps, self.in_caps, 1], device=self.device)
+        bias = torch.tile(self.bias, [batch_size, 1, 1])
+
+        # detach to prevent gradient flow while routing
+        temp_u_hat = u_hat.detach()
+        temp_bias = bias.detach()
+
+        b_ij = torch.zeros(batch_size, self.num_caps,
+                           self.in_caps, 1, requires_grad=False).to(self.device)
+
         for r in range(self.num_routing):
             c_ij = F.softmax(b_ij, dim=1)
-            c_ij_tiled = c_ij.tile([1, 1, 1, self.dim_caps])
-            s_j = torch.sum(c_ij_tiled * u_hat, dim=2) + bias
+            c_ij_tiled = torch.tile(c_ij, [1, 1, 1, self.dim_caps])
+            if r == self.num_routing - 1:
+                # use u_hat and bias in the last iteration for grad.
+                s_j = torch.sum(c_ij_tiled * u_hat, dim=2) + bias
+            else:
+                s_j = torch.sum(c_ij_tiled * temp_u_hat, dim=2) + temp_bias
             v_j = squash(s_j)
+
             if r < self.num_routing - 1:
-                v_j = v_j.unsqueeze(2)
-                v_j = v_j.tile([1, 1, self.in_caps, 1])
+                v_j = torch.unsqueeze(v_j, 2)
+                v_j = torch.tile(v_j, [1, 1, self.in_caps, 1])
 
                 # calculate scale factor t
                 p_p = 0.9
-                d = torch.norm(v_j - u_hat, dim=-1, keepdim=True)
+                d = torch.norm(v_j - temp_u_hat, dim=-1, keepdim=True)
                 d_o = torch.mean(torch.mean(d)).item()
                 d_p = d_o * 0.5
                 t = np.log(p_p * (self.num_caps - 1)) - \
@@ -191,10 +202,9 @@ class RoutingCapsules(nn.Module):
 
         return v_j
 
-
     def restrict_prediction(self, u_hat, u_norm):
         u_hat_norm = torch.norm(u_hat, dim=-1, keepdim=True)
-        u_norm = u_norm.unsqueeze(1).unsqueeze(3)
-        u_norm = u_norm.tile([1, self.num_caps, 1, self.dim_caps])
+        u_norm = torch.unsqueeze(torch.unsqueeze(u_norm, 1), 3)
+        u_norm = torch.tile(u_norm, [1, self.num_caps, 1, self.dim_caps])
         new_u_hat_norm = torch.minimum(u_hat_norm, u_norm)
         return u_hat / u_hat_norm * new_u_hat_norm

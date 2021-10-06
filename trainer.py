@@ -139,7 +139,8 @@ class CapsNetTrainer:
                 if current_memory_usage > max_memory_usage:
                     max_memory_usage = current_memory_usage
 
-            # self.scheduler.step()
+            if self.scheduler:
+                self.scheduler.step()
 
         now = str(datetime.now()).replace(" ", "-")
         error_rate = round((1-accuracy)*100, 2)
