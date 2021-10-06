@@ -164,11 +164,7 @@ class RoutingCapsules(nn.Module):
         u_hat = torch.sum(u * w, dim=-1)
 
         # ensure that ||u_hat|| <= ||v_i||
-        u_hat_norm = torch.norm(u_hat, dim=-1, keepdim=True)
-        u_norm = u_norm.unsqueeze(1).unsqueeze(3)
-        u_norm = u_norm.tile([1, self.num_caps, 1, self.dim_caps])
-        new_u_hat_norm = torch.minimum(u_hat_norm, u_norm)
-        u_hat = u_hat / u_hat_norm * new_u_hat_norm
+        u_hat = self.restrict_prediction(u_hat, u_norm)
 
         # scaled distance agreement routing
         bias = self.bias.tile([batch_size, 1, 1])
@@ -186,12 +182,19 @@ class RoutingCapsules(nn.Module):
                 # calculate scale factor t
                 p_p = 0.9
                 d = torch.norm(v_j - u_hat, dim=-1, keepdim=True)
-                d_o = torch.sum(torch.sum(d))
+                d_o = torch.mean(torch.mean(d)).item()
                 d_p = d_o * 0.5
                 t = np.log(p_p * (self.num_caps - 1)) - \
                     np.log(1 - p_p) / (d_p - d_o + 1e-12)
-                t = t.unsqueeze(-1)
 
                 b_ij = t * d
 
         return v_j
+
+
+    def restrict_prediction(self, u_hat, u_norm):
+        u_hat_norm = torch.norm(u_hat, dim=-1, keepdim=True)
+        u_norm = u_norm.unsqueeze(1).unsqueeze(3)
+        u_norm = u_norm.tile([1, self.num_caps, 1, self.dim_caps])
+        new_u_hat_norm = torch.minimum(u_hat_norm, u_norm)
+        return u_hat / u_hat_norm * new_u_hat_norm
