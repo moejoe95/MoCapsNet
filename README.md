@@ -1,6 +1,6 @@
 # Momentum Capsule Network
 
-Official implementation of the paper [Momentum Capsule Networks (MoCapsNet)](). 
+Official implementation of the paper [Momentum Capsule Networks (MoCapsNet)](https://arxiv.org/abs/2201.11091). 
 
 ## Abstract
 
