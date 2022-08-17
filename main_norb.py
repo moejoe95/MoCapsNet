@@ -1,10 +1,9 @@
 import os
 import torch
-import torchvision
 import torchvision.transforms as transforms
-from tinyimagenet import TinyImageNet
 from trainer import CapsNetTrainer
 import argparse
+from small_norb import smallNORB
 
 
 torch.manual_seed(23545)
@@ -94,67 +93,31 @@ if args.gpu_device is not None:
 if args.multi_gpu:
     args.batch_size *= torch.cuda.device_count()
 
-datasets = {
-    'MNIST': torchvision.datasets.MNIST,
-    'CIFAR': torchvision.datasets.CIFAR10,
-    'CIFAR100': torchvision.datasets.CIFAR100,
-    'SVHN': torchvision.datasets.SVHN,
-    "TINYIMAGENET": TinyImageNet
-}
 
-# dataset defaults
-split_train = {'train': True}
-split_test = {'train': False}
-size = 32
-mean, std = ((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-download = True
-
-if args.dataset.upper() == 'MNIST':
-    args.data_path = os.path.join(args.data_path, 'MNIST')
-    size = 28
-    classes = list(range(10))
-    mean, std = ((0.1307,), (0.3081,))
-elif args.dataset.upper() == 'CIFAR':
-    args.data_path = os.path.join(args.data_path, 'CIFAR')
-    classes = ['plane', 'car', 'bird', 'cat', 'deer',
-               'dog', 'frog', 'horse', 'ship', 'truck']
-elif args.dataset.upper() == 'CIFAR100':
-    args.data_path = os.path.join(args.data_path, 'CIFAR100')
-    classes = list(range(100))
-elif args.dataset.upper() == 'SVHN':
-    args.data_path = os.path.join(args.data_path, 'SVHN')
-    classes = list(range(10))
-    split_train = {'split': "train"}
-    split_test = {'split': "test"}
-elif args.dataset.upper() == 'TINYIMAGENET':
-    args.data_path = os.path.join(args.data_path, 'tiny-imagenet-200')
-    classes = list(range(1000))
-    split_train = {'split': "train"}
-    split_test = {'split': "val"}
-    download = False
-    size = 64
-else:
-    raise ValueError('Dataset must be either MNIST, SVHN or CIFAR')
-
+classes = ['animal', 'human', 'airplane', 'truck', 'car']
 args.num_classes = len(classes)
 
-transform = transforms.Compose([
-    # shift by 2 pixels in either direction with zero padding.
-    transforms.RandomCrop(size, padding=2),
-    transforms.ToTensor(),
-    transforms.Normalize(mean, std)
+transform_train = transforms.Compose([
+    transforms.Resize(48),
+    transforms.RandomCrop(32),
+    transforms.ColorJitter(brightness=32./255, contrast=0.5),
+    transforms.ToTensor()
+])
+
+transform_test = transforms.Compose([
+    transforms.Resize(48),
+    transforms.CenterCrop(32),
+    transforms.ToTensor()
 ])
 
 loaders = {}
-trainset = datasets[args.dataset.upper()](
-    root=args.data_path, **split_train, download=download, transform=transform)
-loaders['train'] = torch.utils.data.DataLoader(
-    trainset, batch_size=args.batch_size, shuffle=True, num_workers=2)
 
-testset = datasets[args.dataset.upper()](
-    root=args.data_path, **split_test, download=download, transform=transform)
+loaders['train'] = torch.utils.data.DataLoader(
+    smallNORB(DATA_PATH, train=True, download=True, transform=transform_train), batch_size=args.batch_size, shuffle=True)
+
 loaders['test'] = torch.utils.data.DataLoader(
-    testset, batch_size=args.batch_size, shuffle=False, num_workers=2)
+    smallNORB(DATA_PATH, train=False, transform=transform_test), batch_size=args.batch_size, shuffle=True)
+
 
 print(8*'#', f'Using {args.dataset.upper()} dataset', 8*'#')
 

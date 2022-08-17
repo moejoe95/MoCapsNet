@@ -2,6 +2,7 @@
 #### Licensed under the MIT license ####
 ########################################
 
+from torchsummary import summary
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -43,7 +44,8 @@ class CapsNetTrainer:
         self.net = CapsuleNetwork(args, img_shape=img_shape, channels=256, primary_dim=8, num_classes=args.num_classes,
                                   out_dim=16, device=self.device).to(self.device)
 
-        # print(self.net)
+        summary(self.net, img_shape)
+
         if args.momentum:
             self.net = transform_to_momentumnet(
                 self.net,
@@ -64,6 +66,7 @@ class CapsNetTrainer:
             print('using ranger21 optimizer...')
             self.optimizer = Ranger21(
                 self.net.parameters(), lr=args.learning_rate, num_epochs=args.epochs, num_batches_per_epoch=args.batch_size)
+            self.scheduler = None
         else:
             print('using adam optimizer...')
             self.optimizer = optim.Adam(
@@ -113,8 +116,14 @@ class CapsNetTrainer:
 
                     running_loss += loss.item()
 
+                    labels = labels.squeeze()
+                    # if labels.size(dim=1) == 1:
+                    #     labels = labels.view(
+                    #         labels.size(dim=0), labels.size(dim=2))
+
                     _, predicted = torch.max(outputs, 1)
                     _, labels = torch.max(labels, 1)
+
                     total += labels.size(0)
                     correct += (predicted == labels).sum()
                     accuracy = float(correct) / float(total)
@@ -136,6 +145,7 @@ class CapsNetTrainer:
 
                 # check memory usage
                 current_memory_usage = get_gpu_memory_map()[0]
+                # print(current_memory_usage)
                 if current_memory_usage > max_memory_usage:
                     max_memory_usage = current_memory_usage
 
@@ -152,6 +162,7 @@ class CapsNetTrainer:
         for images, labels in self.loaders['test']:
             images, labels = images.to(self.device), labels.to(self.device)
             outputs, reconstructions, _ = self.net(images)
+            labels = labels.squeeze()
             _, predicted = torch.max(outputs, 1)
             c = (predicted == labels).squeeze()
             for i in range(labels.size(0)):
